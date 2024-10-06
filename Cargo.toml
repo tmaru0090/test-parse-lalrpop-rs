@@ -1,0 +1,13 @@
+[package]
+name = "test-parse"
+version = "0.1.0"
+edition = "2021"
+build = "src/build.rs"
+[build-dependencies]
+lalrpop = "0.22.0"
+[dependencies]
+env_logger = "0.11.5"
+lalrpop = "0.22.0"
+lalrpop-util = "0.22.0"
+lazy_static = "1.5.0"
+log = "0.4.22"

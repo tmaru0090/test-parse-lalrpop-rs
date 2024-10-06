@@ -1,0 +1,124 @@
+grammar;
+use crate::VARIABLES;
+use crate::SystemValue;
+use crate::parse_to_system_value;
+use crate::SYSTEM_TYPE_NAME;
+use crate::check_type;
+use crate::infer_type;
+
+
+String: SystemValue = {
+//    "\"" <str:r#"([^"\\]|\\.)*"#> "\"" => str.to_string().into(),
+};
+
+Newline = r"\n";
+Whitespace = r"[ \t\r]+";
+
+pub Expr: SystemValue = {
+    <l:Expr> "+" <r:Term> => (l + r).unwrap(),
+    <l:Expr> "-" <r:Term> => (l - r).unwrap(),
+    <t:Term> => t,
+};
+
+pub Type: String = {
+    <id:Identifier> <gen:GenericOpt> => format!("{}{}", id, gen),
+};
+
+pub GenericOpt: String = {
+    <gen:Generic> => gen,
+    => "".to_string(),
+};
+
+pub Generic: String = {
+    "<" <types:TypeList> ">" => format!("<{}>", types),
+};
+
+TypeList: String = {
+    <t:Type> "," <rest:TypeList> => format!("{}, {}", t, rest),
+    <t:Type> => t,
+};
+
+pub Statement: Option<SystemValue> = {
+    "let" <id:Identifier> "=" <expr:Expr> ";" => {
+        let data_type = infer_type(&expr).unwrap();
+        if !data_type.is_empty() { check_type(&data_type, &expr).unwrap(); }
+        VARIABLES.lock().unwrap().insert(id, (Some(data_type), expr));
+        None
+    },
+    "let" <id:Identifier> ":" <data_type:Type> "=" <expr:Expr> ";" => {
+        if !data_type.is_empty() { check_type(&data_type, &expr).unwrap(); }
+        VARIABLES.lock().unwrap().insert(id, (Some(data_type), expr));
+        None
+    },
+    "return" <expr:Expr> ";" => {
+        Some(expr)
+    },
+};
+
+pub Statements: Option<SystemValue> = {
+    <stmt:Statement> <nl:Newline> <rest:Statements> => rest,
+    <stmt:Statement> <ws:Whitespace> <rest:Statements> => rest,
+    <stmt:Statement> <nl:Newline> => stmt,
+    <stmt:Statement> <ws:Whitespace> => stmt,
+    <stmt:Statement> => stmt,
+    <nl:Newline> <rest:Statements> => rest,
+    <ws:Whitespace> <rest:Statements> => rest,
+    <nl:Newline> => None,
+    <ws:Whitespace> => None,
+};
+
+Term: SystemValue = {
+    <l:Term> "*" <r:Factor> => (l * r).unwrap(),
+    <l:Term> "/" <r:Factor> => (l / r).unwrap(),
+    <f:Factor> => f,
+};
+
+Factor: SystemValue = {
+    <v:Var> => v.unwrap().1,
+    <f:Function> => f,
+    <n:Num> => n,
+    <s:String> => s.into(),
+    "(" <e:Expr> ")" => e,
+    "-" <f:Factor> => match f {
+        SystemValue::I8(n) => SystemValue::I8(-n),
+        SystemValue::I16(n) => SystemValue::I16(-n),
+        SystemValue::I32(n) => SystemValue::I32(-n),
+        SystemValue::I64(n) => SystemValue::I64(-n),
+        SystemValue::F32(n) => SystemValue::F32(-n),
+        SystemValue::F64(n) => SystemValue::F64(-n),
+        _ => panic!("Unsupported type for negation"),
+    },
+    <a:Array> => a,
+    "null" => SystemValue::Null,
+};
+
+pub Array: SystemValue = {
+    "[" <elems:Elements> "]" => SystemValue::Array(elems),
+};
+
+Elements: Vec<SystemValue> = {
+    <elem:Expr> "," <rest:Elements> => {
+        let mut v = vec![SystemValue::Pointer(Box::new(elem))];
+        v.extend(rest);
+        v
+    },
+    <elem:Expr> => vec![SystemValue::Pointer(Box::new(elem))],
+};
+
+Num: SystemValue = {
+    <n:r"-?[0-9]+(\.[0-9]+)?"> => parse_to_system_value(n),
+};
+
+Var: Option<(Option<String>,SystemValue)> = {
+    <id: Identifier> => {
+        VARIABLES.lock().unwrap().get(&id).cloned()
+    }
+};
+
+Identifier: String = {
+    <id:r"[a-zA-Z_][a-zA-Z0-9_]*"> => id.to_string(),
+};
+
+Function: SystemValue = {
+    // "fn" <id:Identifier> "(" ")" =>
+};
