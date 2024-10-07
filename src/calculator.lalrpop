@@ -7,12 +7,11 @@ use crate::check_type;
 use crate::infer_type;
 
 
-String: SystemValue = {
-//    "\"" <str:r#"([^"\\]|\\.)*"#> "\"" => str.to_string().into(),
-};
 
-Newline = r"\n";
-Whitespace = r"[ \t\r]+";
+String: SystemValue = {
+    <s:r#""([^"\\]|\\.)*""#> => SystemValue::String(s[1..s.len()-1].to_string()),
+    <s:r#"'([^'\\]|\\.)*'"#> => SystemValue::String(s[1..s.len()-1].to_string()),
+};
 
 pub Expr: SystemValue = {
     <l:Expr> "+" <r:Term> => (l + r).unwrap(),
@@ -39,33 +38,33 @@ TypeList: String = {
 };
 
 pub Statement: Option<SystemValue> = {
-    "let" <id:Identifier> "=" <expr:Expr> ";" => {
-        let data_type = infer_type(&expr).unwrap();
+    <f:Function> => Some(f),
+    <l:LetStatement> => l,
+    <r:ReturnStatement> => r,
+};
+LetStatement: Option<SystemValue> = {
+    "let" <id:Identifier> "=" <expr:Expr> ";" =>{
+    	let data_type = infer_type(&expr).unwrap();
         if !data_type.is_empty() { check_type(&data_type, &expr).unwrap(); }
         VARIABLES.lock().unwrap().insert(id, (Some(data_type), expr));
         None
     },
     "let" <id:Identifier> ":" <data_type:Type> "=" <expr:Expr> ";" => {
-        if !data_type.is_empty() { check_type(&data_type, &expr).unwrap(); }
+	if !data_type.is_empty() { check_type(&data_type, &expr).unwrap(); }
         VARIABLES.lock().unwrap().insert(id, (Some(data_type), expr));
         None
-    },
-    "return" <expr:Expr> ";" => {
-        Some(expr)
+
     },
 };
 
-pub Statements: Option<SystemValue> = {
-    <stmt:Statement> <nl:Newline> <rest:Statements> => rest,
-    <stmt:Statement> <ws:Whitespace> <rest:Statements> => rest,
-    <stmt:Statement> <nl:Newline> => stmt,
-    <stmt:Statement> <ws:Whitespace> => stmt,
-    <stmt:Statement> => stmt,
-    <nl:Newline> <rest:Statements> => rest,
-    <ws:Whitespace> <rest:Statements> => rest,
-    <nl:Newline> => None,
-    <ws:Whitespace> => None,
+ReturnStatement: Option<SystemValue> = {
+    "return" <expr:Expr> ";" => {Some(expr)},
 };
+
+pub Statements: Option<SystemValue> = {
+     <stmt:Statement> => stmt,
+};
+
 
 Term: SystemValue = {
     <l:Term> "*" <r:Factor> => (l * r).unwrap(),
@@ -75,9 +74,8 @@ Term: SystemValue = {
 
 Factor: SystemValue = {
     <v:Var> => v.unwrap().1,
-    <f:Function> => f,
     <n:Num> => n,
-    <s:String> => s.into(),
+    <s:String> => s,
     "(" <e:Expr> ")" => e,
     "-" <f:Factor> => match f {
         SystemValue::I8(n) => SystemValue::I8(-n),
@@ -116,9 +114,31 @@ Var: Option<(Option<String>,SystemValue)> = {
 };
 
 Identifier: String = {
-    <id:r"[a-zA-Z_][a-zA-Z0-9_]*"> => id.to_string(),
+    <id:r"[a-zA-Z_][a-zA-Z0-9_]*|[ぁ-んァ-ン一-龯][ぁ-んァ-ン一-龯a-zA-Z0-9_]*"> => id.to_string(),
 };
 
+
 Function: SystemValue = {
-    // "fn" <id:Identifier> "(" ")" =>
+    "fn" <id:Identifier> "(" <params:ParamList> ")" "->" <ret_type:Type> "{" <body:Statements> "}" => {
+        SystemValue::Function(
+            id,
+            params,
+            ret_type,
+            vec![body.unwrap()]
+        )
+    },
+};
+
+ParamList: Vec<(String, String)> = {
+    <param:Param> "," <rest:ParamList> => {
+        let mut v = vec![param];
+        v.extend(rest);
+        v
+    },
+    <param:Param> => vec![param],
+    => vec![],
+};
+
+Param: (String, String) = {
+    <id:Identifier> ":" <ty:Type> => (id, ty),
 };

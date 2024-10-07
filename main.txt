@@ -1,0 +1,5 @@
+let a = 100;
+fn test(test:i32)->void{
+	let a = 100;
+}
+

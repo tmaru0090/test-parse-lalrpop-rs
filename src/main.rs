@@ -157,23 +157,27 @@ pub fn infer_type(value: &SystemValue) -> Result<String, TypeError> {
         _ => Err(TypeError::UnknownType("Unknown SystemValue type".to_string())),
     }
 }
-
 fn main() {
-    std::env::set_var("RUST_LOG","debug");
+    std::env::set_var("RUST_LOG", "debug");
     env_logger::init();
 
     {
         let mut vars = VARIABLES.lock().unwrap();
-        vars.insert("x".to_string(),(None,SystemValue::F32(1919.1)));
+        vars.insert("x".to_string(), (None, SystemValue::F32(1919.1)));
     }
-    let stmt = "let a =100;";
-    let res = calculator::StatementsParser::new().parse(stmt);
-    match res {
-        Ok(value) => {
-            info!("Result: {:?}",value);
-            info!("Global variables: {:?}",VARIABLES.lock().unwrap());
-        },
-        Err(e) => println!("Error: {:?}",e),
+
+    let stmt =std::fs::read_to_string("main.txt").unwrap();
+    let results: Vec<Option<SystemValue>> = stmt
+        .lines() // 行ごとに分割
+        .map(|line| line.trim()) // 各行の前後の空白を取り除く
+        .filter(|line| !line.is_empty()) // 空行を除外
+        .map(|line| calculator::StatementsParser::new().parse(line).unwrap()) // 各行をパース
+        .collect();
+
+    for (i, result) in results.iter().enumerate() {
+        info!("Result of line {}: {:?}", i + 1, result);
     }
+    info!("Global variables: {:?}",VARIABLES.lock().unwrap());
+
     std::env::remove_var("RUST_LOG");
 }

@@ -24,6 +24,7 @@ pub enum SystemValue {
     F64(f64),
     String(String),
     Bool(bool),
+    Function(String,Vec<(String,String)>,String,Vec<SystemValue>),
     Array(Vec<SystemValue>),
     Pointer(Box<SystemValue>),
     Tuple(Vec<SystemValue>),
